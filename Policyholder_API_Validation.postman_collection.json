@@ -1,0 +1,276 @@
+{
+  "info": {
+    "name": "Policyholder API Validation (Sample Project)",
+    "description": "Sample API testing project. Uses the free JSONPlaceholder API as a stand-in for a policyholder API and compares its responses against simulated portal values. All data is public/made-up.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Functional checks",
+      "item": [
+        {
+          "name": "TC-01 Get policyholder - valid ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response time is under 1500 ms\", () => pm.expect(pm.response.responseTime).to.be.below(1500));",
+                  "pm.test(\"Content-Type is JSON\", () => pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"));",
+                  "const user = pm.response.json();",
+                  "pm.test(\"Required fields are present\", () => {",
+                  "  [\"id\", \"name\", \"email\", \"phone\", \"address\"].forEach(f => pm.expect(user, \"missing field: \" + f).to.have.property(f));",
+                  "});",
+                  "pm.test(\"Field types are correct\", () => {",
+                  "  pm.expect(user.id).to.be.a(\"number\");",
+                  "  pm.expect(user.name).to.be.a(\"string\").and.not.empty;",
+                  "  pm.expect(user.address).to.be.an(\"object\");",
+                  "});",
+                  "pm.test(\"Email format is valid\", () => pm.expect(user.email).to.match(/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/));",
+                  "pm.test(\"Address contains city and zipcode\", () => {",
+                  "  pm.expect(user.address).to.have.property(\"city\");",
+                  "  pm.expect(user.address).to.have.property(\"zipcode\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "1"
+              ]
+            },
+            "description": "Happy path: valid record returns correct status, headers, fields, types, and formats."
+          }
+        },
+        {
+          "name": "TC-02 Get policyholder - unknown ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Unknown record returns 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"Response body is empty (no data leaked)\", () => pm.expect(Object.keys(pm.response.json())).to.have.lengthOf(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/9999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "9999"
+              ]
+            },
+            "description": "Negative test: nonexistent record."
+          }
+        },
+        {
+          "name": "TC-03 Get policyholder - invalid ID format",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Invalid ID format is rejected (404)\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"Invalid ID does not return record data\", () => pm.expect(pm.response.json()).to.not.have.property(\"name\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "abc"
+              ]
+            },
+            "description": "Negative test: malformed identifier."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. API vs portal validation",
+      "item": [
+        {
+          "name": "TC-04 Compare API data to portal display",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Simulated \"portal display\" values are stored as collection variables (portal_*).",
+                  "// The API response is compared field by field against what the portal shows.",
+                  "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                  "const api = pm.response.json();",
+                  "const apiValues = {",
+                  "  name: api.name,",
+                  "  email: api.email,",
+                  "  city: api.address.city,",
+                  "  phone: api.phone,",
+                  "  zipcode: api.address.zipcode",
+                  "};",
+                  "const portalValues = {",
+                  "  name: pm.collectionVariables.get(\"portal_name\"),",
+                  "  email: pm.collectionVariables.get(\"portal_email\"),",
+                  "  city: pm.collectionVariables.get(\"portal_city\"),",
+                  "  phone: pm.collectionVariables.get(\"portal_phone\"),",
+                  "  zipcode: pm.collectionVariables.get(\"portal_zipcode\")",
+                  "};",
+                  "const mismatches = Object.keys(apiValues).filter(k => apiValues[k] !== portalValues[k]);",
+                  "mismatches.forEach(k => console.warn(\"MISMATCH [\" + k + \"] API=\" + apiValues[k] + \" | Portal=\" + portalValues[k]));",
+                  "pm.test(\"Name matches portal\", () => pm.expect(apiValues.name).to.eql(portalValues.name));",
+                  "pm.test(\"Email matches portal\", () => pm.expect(apiValues.email).to.eql(portalValues.email));",
+                  "pm.test(\"City matches portal\", () => pm.expect(apiValues.city).to.eql(portalValues.city));",
+                  "pm.test(\"Phone matches portal\", () => pm.expect(apiValues.phone).to.eql(portalValues.phone));",
+                  "// The portal_zipcode variable is deliberately wrong to prove mismatches are detected.",
+                  "pm.test(\"Mismatch detected: zipcode differs between API and portal\", () => pm.expect(mismatches).to.include(\"zipcode\"));",
+                  "pm.test(\"No unexpected mismatches beyond the known zipcode defect\", () => pm.expect(mismatches).to.eql([\"zipcode\"]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "1"
+              ]
+            },
+            "description": "Compares API values against simulated portal values and reports mismatches. Zipcode is deliberately different."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Regression",
+      "item": [
+        {
+          "name": "TC-05 List all policyholders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                  "const users = pm.response.json();",
+                  "pm.test(\"Response is an array with 10 records\", () => {",
+                  "  pm.expect(users).to.be.an(\"array\");",
+                  "  pm.expect(users).to.have.lengthOf(10);",
+                  "});",
+                  "pm.test(\"All record IDs are unique\", () => {",
+                  "  const ids = users.map(u => u.id);",
+                  "  pm.expect(new Set(ids).size).to.eql(ids.length);",
+                  "});",
+                  "pm.test(\"Every record has the required fields\", () => {",
+                  "  users.forEach(u => [\"id\", \"name\", \"email\", \"phone\", \"address\"].forEach(f => pm.expect(u, \"record \" + u.id + \" missing \" + f).to.have.property(f)));",
+                  "});",
+                  "pm.test(\"Every email has a valid format\", () => users.forEach(u => pm.expect(u.email).to.match(/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/)));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users"
+              ]
+            },
+            "description": "Regression: list endpoint returns consistent, complete records."
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://jsonplaceholder.typicode.com"
+    },
+    {
+      "key": "portal_name",
+      "value": "Leanne Graham"
+    },
+    {
+      "key": "portal_email",
+      "value": "Sincere@april.biz"
+    },
+    {
+      "key": "portal_city",
+      "value": "Gwenborough"
+    },
+    {
+      "key": "portal_phone",
+      "value": "1-770-736-8031 x56442"
+    },
+    {
+      "key": "portal_zipcode",
+      "value": "92998-0000"
+    }
+  ]
+}
